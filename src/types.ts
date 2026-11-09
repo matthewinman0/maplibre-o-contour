@@ -1,6 +1,13 @@
 import type Actor from "./actor";
 import type { Timer } from "./performance";
 import type WorkerDispatch from "./worker-dispatch";
+import type { LandformTileOptions } from "./landform-options";
+
+export type {
+  LandformGroup,
+  LandformThresholds,
+  LandformTileOptions,
+} from "./landform-options";
 
 /** Scheme used to map pixel rgb values elevations. */
 export type Encoding = "terrarium" | "mapbox";
@@ -135,6 +142,15 @@ export interface DemManager {
     x: number,
     y: number,
     options: IndividualContourTileOptions,
+    abortController: AbortController,
+    timer?: Timer,
+  ): Promise<ContourTile>;
+  /** Detects orienteering landforms (knolls, pits, cliffs, gullies...) and returns them as an encoded vector tile. */
+  fetchLandformTile(
+    z: number,
+    x: number,
+    y: number,
+    options: LandformTileOptions,
     abortController: AbortController,
     timer?: Timer,
   ): Promise<ContourTile>;

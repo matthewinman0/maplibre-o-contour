@@ -132,6 +132,63 @@ dispatcher.registerMessageHandler("contour-worker" as any, async () => { // when
 });
 ```
 
+# Orienteering landforms (ISOM)
+
+Besides contours, the same DEM tiles can be searched for the landforms that an orienteering map ([ISOM 2017-2](https://omapwiki.orienteering.sport/specifications/isom/)) draws as symbols. Detection runs in the browser (in the web worker when `worker: true`) with the same caching as contours. See [landforms.html](./landforms.html) for a styled example.
+
+**This needs a DEM of roughly 1 m resolution** (LiDAR derived). A knoll or pit is a metre or two across, so on a 30 m global DEM there is nothing to find: tiles whose source pixels are larger than `maxCellSize` (4 m by default) come back empty.
+
+```js
+map.addSource("landforms", {
+  type: "vector",
+  tiles: [
+    demSource.landformProtocolUrl({
+      // default: everything except boulders
+      features: ["knolls", "depressions", "banks", "gullies", "walls", "formLines", "brokenGround"],
+      // optional, override any threshold (metres, degrees), see DEFAULT_LANDFORM_THRESHOLDS
+      thresholds: { knollMinHeight: 0.5, steepSlope: 45 },
+    }),
+  ],
+  minzoom: 14,
+  maxzoom: 17, // the highest zoom your DEM has
+});
+```
+
+`demSource.setupMaplibre` registers the landform protocol next to the contour one. In the worker-import setup the protocol is `dem-landform://{z}/{x}/{y}?o=<url-encoded JSON of the options>`.
+
+## What is detected
+
+| ISOM | Feature | `kind` | Layer | How |
+| --- | --- | --- | --- | --- |
+| 103 | Form line | `form_line` | `landform_lines` | half-interval contours, kept only where the ground is flatter than `formLineMaxSlope` |
+| 104 | Earth bank | `bank` | `landform_lines`, tags in `landform_ticks` | top edge of ground steeper than `steepSlope` that drops at least 1 m |
+| 202 | Cliff | `cliff` | same | as above, median slope of at least `cliffSlope` |
+| 201 | Impassable cliff | `impassable_cliff` | same | as above, at least `impassableMinHeight` high and `impassableSlope` steep |
+| 105.1 / 106 | Earth wall / ruined earth wall | `earth_wall`, `ruined_earth_wall` | `landform_lines` | narrow, elongated ridges at least 1 m / 0.5 m high and 21 m / 55 m long |
+| 107 / 108 | Erosion gully / small erosion gully | `erosion_gully`, `small_erosion_gully` | `landform_lines` | narrow, elongated ditches at least 1 m / 0.5 m deep, reduced to a centre line |
+| 109 | Small knoll | `knoll` | `landform_points` | mound at least 1 m high, found by flooding the inverted terrain |
+| 110 | Small elongated knoll | `elongated_knoll` | `landform_points` | as above with a length/width ratio of 1.7 or more, `orient` is the bearing of the long axis |
+| 111 | Small depression | `depression` | `landform_points` | closed depression at least 1 m deep and 2 m wide with gentle sides |
+| 112 | Pit | `pit` | `landform_points` | closed depression at least 1 m deep with steep sides (35° or more) |
+| 113 / 114 | Broken / very broken ground | `broken_ground`, `very_broken_ground` | `landform_areas` | outlines of ground where small-scale relief is rough |
+| 204 / 205 | Boulder / large boulder | `boulder`, `large_boulder` | `landform_points` | off by default: small, steep mounds at least 1 m / 2 m high |
+
+Every feature has `kind` and `isom` (the symbol number). Points also carry `ele` (metres), `height` or `depth`, `length` and `width` (metres), and two flags that help you decide what to draw: `small` is true when the feature is too small to be drawn with contours (see ISOM 101), and `contoured` is true when a contour at your `contourInterval` (5 m by default) already passes through it. Lines carry `height`/`depth`, `slope` or `length` where that makes sense, and form lines carry `ele`.
+
+Cliff and bank tags are separate features in `landform_ticks`, pointing downhill from the top edge, spaced by `tickSpacing` tile units (default 80, about 10 px on a 512 px tile). Draw them with a `line` layer.
+
+## Not in the DEM
+
+Most of ISOM is not visible in an elevation model: water and marshes, vegetation, paths, roads, buildings, fences, walls, stony ground, sand, trenches that are man-made, prominent features, and the exact location of boulders under trees. Those need other sources (for example OpenStreetMap) or a visit in the field.
+
+## Read this before trusting the output
+
+- These are heuristics. They are tested on synthetic terrain, not tuned against real LiDAR, so expect to adjust the thresholds for your DEM and terrain.
+- A DEM cannot tell an earth bank from a rock face. Banks and cliffs are separated by height and steepness only.
+- Gully and wall detection compares the ground with its surroundings within `linearScale` (10 m), so wide valleys and broad ridges are ignored on purpose.
+- Boulders are a guess: a boulder on a bare-earth DEM is usually filtered out, and a small steep knoll looks the same.
+- Features are measured in a window around the tile, so they continue across tile edges. Points are emitted by the tile that contains their centre, lines are clipped at the tile edge.
+
 # How it works
 
 <img src="architecture.png" width="500">
@@ -143,6 +200,7 @@ dispatcher.registerMessageHandler("contour-worker" as any, async () => { // when
 - [`decode-image.ts`](./src/decode-image.ts) decodes the raster-dem image RGB values to meters above sea level for each pixel in the tile.
 - [`HeightTile`](./src/height-tile.ts) stitches those raw DEM tiles into a "virtual tile" that contains the border of neighboring tiles, aligns elevation measurements to the tile grid, and smooths the elevation measurements.
 - [`isoline.ts`](./src/isolines.ts) generates contour isolines from a `HeightTile` using a marching-squares implementation derived from [d3-contour](https://github.com/d3/d3-contour).
+- [`landforms.ts`](./src/landforms.ts) finds the ISOM landforms above in a window of elevations around the tile, using [`landform-grid.ts`](./src/landform-grid.ts) and [`landform-ops.ts`](./src/landform-ops.ts) for gradients, priority-flood depression filling, skeletons and polygon helpers. Thresholds live in [`landform-options.ts`](./src/landform-options.ts).
 - [`vtpbf.ts`](./src/vtpbf.ts) encodes the contour isolines as mapbox vector tile bytes.
 
 MapLibre sends that vector tile to its own worker, decodes it, and renders as if it had been generated by a server.
