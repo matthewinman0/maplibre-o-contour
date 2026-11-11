@@ -11,6 +11,7 @@ import type {
   Encoding,
   FetchResponse,
   IndividualContourTileOptions,
+  LandformTileOptions,
 } from "./types";
 import { prepareDemTile } from "./utils";
 
@@ -101,6 +102,25 @@ export default class RemoteDemManager implements DemManager {
   ): Promise<ContourTile> =>
     this.actor.send(
       "fetchContourTile",
+      [],
+      abortController,
+      timer,
+      this.managerId,
+      z,
+      x,
+      y,
+      options,
+    );
+  fetchLandformTile = (
+    z: number,
+    x: number,
+    y: number,
+    options: LandformTileOptions,
+    abortController: AbortController,
+    timer?: Timer,
+  ): Promise<ContourTile> =>
+    this.actor.send(
+      "fetchLandformTile",
       [],
       abortController,
       timer,

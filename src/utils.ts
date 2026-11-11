@@ -1,5 +1,6 @@
 import type {
   ContourTile,
+  LandformTileOptions,
   DemTile,
   GlobalContourTileOptions,
   IndividualContourTileOptions,
@@ -68,6 +69,34 @@ export function decodeOptions(options: string): GlobalContourTileOptions {
         return [k, v];
       }),
   ) as any as GlobalContourTileOptions;
+}
+
+function stableStringify(value: any): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${sortedEntries(value)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Landform options are nested, so they travel in a single JSON query parameter. */
+export function encodeLandformOptions(options: LandformTileOptions): string {
+  return `o=${encodeURIComponent(stableStringify(options))}`;
+}
+
+export function decodeLandformOptions(url: string): LandformTileOptions {
+  const query = url.replace(/^[^?]*\??/, "");
+  for (const part of query.split("&")) {
+    if (part.startsWith("o=")) {
+      return JSON.parse(decodeURIComponent(part.slice(2)));
+    }
+  }
+  return {};
 }
 
 export function encodeIndividualOptions(

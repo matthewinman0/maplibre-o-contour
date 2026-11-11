@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ISOM landforms from a DEM</title>
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>
+    <!-- the local build: run `npm run build` first -->
+    <script src="./dist/index.min.js"></script>
+    <link
+      href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #1d1a17;
+        --muted: #8a8279;
+        --paper: #fbf9f5;
+        --rule: #e4ded3;
+        --brown: #b4561e;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family:
+          "Inter", "Helvetica Neue", system-ui, -apple-system, "Segoe UI",
+          sans-serif;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+      #map {
+        position: absolute;
+        inset: 0;
+      }
+      #panel {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        width: 264px;
+        max-height: calc(100% - 32px);
+        overflow-y: auto;
+        box-sizing: border-box;
+        padding: 20px 20px 16px;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        box-shadow: 0 8px 28px rgba(29, 26, 23, 0.1);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      h1 {
+        margin: 0 0 2px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        margin: 0 0 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      h2 {
+        margin: 16px 0 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--rule);
+        color: var(--muted);
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      label {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 3px 0;
+        cursor: pointer;
+      }
+      label span.name {
+        flex: 1;
+      }
+      label span.code {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        font-size: 11.5px;
+      }
+      input[type="checkbox"] {
+        accent-color: var(--brown);
+        margin: 0;
+        transform: translateY(1px);
+      }
+      .slider {
+        padding: 4px 0 2px;
+      }
+      .slider .head {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+      .slider output {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .slider input[type="range"] {
+        width: 100%;
+        margin: 2px 0 0;
+        accent-color: var(--brown);
+      }
+      #status {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 11.5px;
+      }
+      #status.warn {
+        color: var(--brown);
+      }
+      .note {
+        margin: 14px 0 0;
+        color: var(--muted);
+        font-size: 11.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="panel">
+      <h1>Landforms from a DEM</h1>
+      <p class="sub">ISOM 2017-2, detected in the browser</p>
+      <div id="toggles"></div>
+      <div id="status"></div>
+      <p class="note">
+        Needs a DEM of about 1&nbsp;m resolution. Zoom in to 15 or more.
+        Edit the settings at the top of the script, or pass
+        <code>?dem=&amp;maxzoom=&amp;tileSize=</code> in the URL.
+      </p>
+    </div>
+    <script>
+      // ---- settings --------------------------------------------------------
+      var params = new URLSearchParams(location.search);
+      var DEM_URL =
+        params.get("dem") || "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
+      var DEM_ENCODING = params.get("encoding") || "terrarium";
+      // highest zoom at which the DEM above has tiles (Mapterhorn: 17 where open LiDAR exists, 12 elsewhere)
+      var DEM_MAXZOOM = Number(params.get("maxzoom") || 17);
+      var DEM_TILE_SIZE = Number(params.get("tileSize") || 512);
+      // Interlaken, Switzerland, which Mapterhorn covers at 0.5 m
+      var START = { center: [7.8504, 46.6863], zoom: 16 };
+
+      // Banks, cliffs and their tags. Changing the detection ones loads the landform tiles again,
+      // the two widths only restyle. Sizes are in screen pixels when the map is at DEM_MAXZOOM,
+      // because the tags are part of the tile data and grow and shrink with the map.
+      var VECTOR_TILE_PX = 512;
+      var SETTINGS = {
+        tagSpacing: 10, // px between tags
+        tagLength: 4.5, // px
+        bankMinHeight: 1, // m
+        bankSlopeExcess: 20, // degrees steeper than the hillside around it
+        steepSlope: 40, // degrees
+        bankMinLength: 9, // m
+        bankWidth: 1, // line width multiplier
+        tagWidth: 1, // line width multiplier
+      };
+      function landformOptions() {
+        var unitsPerPx = 4096 / VECTOR_TILE_PX;
+        return {
+          features: [
+            "knolls",
+            "depressions",
+            "banks",
+            "gullies",
+            "walls",
+            "formLines",
+            "brokenGround",
+            "boulders",
+          ],
+          tickSpacing: Math.round(SETTINGS.tagSpacing * unitsPerPx),
+          tickLength: Math.round(SETTINGS.tagLength * unitsPerPx),
+          // make other thresholds stricter or looser here, for example knollMinHeight: 0.5
+          thresholds: {
+            bankMinHeight: SETTINGS.bankMinHeight,
+            bankSlopeExcess: SETTINGS.bankSlopeExcess,
+            steepSlope: SETTINGS.steepSlope,
+            bankMinLength: SETTINGS.bankMinLength,
+          },
+        };
+      }
+
+      var BROWN = "#b4561e";
+      var CONTOUR = "#c9793f";
+      var BLACK = "#16130f";
+
+      var demSource = new mlcontour.DemSource({
+        url: DEM_URL,
+        encoding: DEM_ENCODING,
+        maxzoom: DEM_MAXZOOM,
+        cacheSize: 200,
+      });
+      // registers the shared DEM, contour and landform protocols
+      demSource.setupMaplibre(maplibregl);
+
+      // ---- icons for the point symbols ----------------------------------------
+      function icon(size, draw) {
+        var canvas = document.createElement("canvas");
+        canvas.width = canvas.height = size;
+        var ctx = canvas.getContext("2d");
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        draw(ctx, size);
+        return ctx.getImageData(0, 0, size, size);
+      }
+      var ICONS = {
+        // 109 small knoll: a dot
+        knoll: function (c, s) {
+          c.fillStyle = BROWN;
+          c.beginPath();
+          c.arc(s / 2, s / 2, s * 0.17, 0, 2 * Math.PI);
+          c.fill();
+        },
+        // 110 small elongated knoll: a long dot, drawn north-south and rotated by `orient`
+        elongated_knoll: function (c, s) {
+          c.fillStyle = BROWN;
+          c.beginPath();
+          c.ellipse(s / 2, s / 2, s * 0.12, s * 0.3, 0, 0, 2 * Math.PI);
+          c.fill();
+        },
+        // 111 small depression: a U
+        depression: function (c, s) {
+          c.strokeStyle = BROWN;
+          c.lineWidth = s * 0.08;
+          c.beginPath();
+          c.arc(s / 2, s * 0.42, s * 0.24, 0, Math.PI);
+          c.stroke();
+        },
+        // 112 pit: a V
+        pit: function (c, s) {
+          c.strokeStyle = BROWN;
+          c.lineWidth = s * 0.08;
+          c.beginPath();
+          c.moveTo(s * 0.28, s * 0.3);
+          c.lineTo(s / 2, s * 0.7);
+          c.lineTo(s * 0.72, s * 0.3);
+          c.stroke();
+        },
+        // 204 boulder: a black triangle
+        boulder: function (c, s) {
+          c.fillStyle = BLACK;
+          c.beginPath();
+          c.moveTo(s / 2, s * 0.3);
+          c.lineTo(s * 0.64, s * 0.62);
+          c.lineTo(s * 0.36, s * 0.62);
+          c.closePath();
+          c.fill();
+        },
+        // 205 large boulder: a bigger black triangle
+        large_boulder: function (c, s) {
+          c.fillStyle = BLACK;
+          c.beginPath();
+          c.moveTo(s / 2, s * 0.2);
+          c.lineTo(s * 0.72, s * 0.74);
+          c.lineTo(s * 0.28, s * 0.74);
+          c.closePath();
+          c.fill();
+        },
+      };
+
+      // ---- map ----------------------------------------------------------------
+      var kind = function (list) {
+        return ["in", ["get", "kind"], ["literal", list]];
+      };
+      var colorByKind = [
+        "match",
+        ["get", "kind"],
+        ["cliff", "impassable_cliff"],
+        BLACK,
+        BROWN,
+      ];
+
+      // each toggle controls a set of layers
+      var GROUPS = [
+        {
+          title: "Base",
+          items: [
+            { name: "Hillshade", code: "", layers: ["hills"], on: true },
+            { name: "Contours", code: "101", layers: ["contours"], on: true },
+          ],
+        },
+        {
+          title: "Detected landforms",
+          items: [
+            { name: "Form lines", code: "103", layers: ["form-lines"], on: true },
+            {
+              name: "Earth banks and cliffs",
+              code: "104 201 202",
+              layers: ["banks", "bank-ticks"],
+              on: true,
+            },
+            {
+              name: "Earth walls",
+              code: "105 106",
+              layers: ["walls", "walls-ruined"],
+              on: true,
+            },
+            {
+              name: "Erosion gullies",
+              code: "107 108",
+              layers: ["gullies"],
+              on: true,
+            },
+            {
+              name: "Knolls",
+              code: "109 110",
+              layers: ["knolls"],
+              on: true,
+            },
+            {
+              name: "Depressions and pits",
+              code: "111 112",
+              layers: ["depressions"],
+              on: true,
+            },
+            {
+              name: "Broken ground",
+              code: "113 114",
+              layers: ["broken-ground"],
+              on: true,
+            },
+            {
+              name: "Boulder candidates",
+              code: "204 205",
+              layers: ["boulders"],
+              on: false,
+            },
+          ],
+        },
+      ];
+
+      var map = new maplibregl.Map({
+        container: "map",
+        center: START.center,
+        zoom: START.zoom,
+        hash: true,
+        maxZoom: 19,
+        style: {
+          version: 8,
+          sources: {
+            dem: {
+              type: "raster-dem",
+              encoding: DEM_ENCODING,
+              tiles: [demSource.sharedDemProtocolUrl], // share cached DEM tiles
+              maxzoom: DEM_MAXZOOM,
+              tileSize: DEM_TILE_SIZE,
+            },
+            contours: {
+              type: "vector",
+              tiles: [
+                demSource.contourProtocolUrl({
+                  // ISOM: 5 m contours, every fifth one an index contour
+                  thresholds: { 11: [5, 25] },
+                  contourLayer: "contours",
+                  elevationKey: "ele",
+                  levelKey: "level",
+                }),
+              ],
+              maxzoom: DEM_MAXZOOM,
+            },
+            landforms: {
+              type: "vector",
+              tiles: [
+                demSource.landformProtocolUrl(landformOptions()),
+              ],
+              minzoom: 14,
+              maxzoom: DEM_MAXZOOM,
+            },
+          },
+          layers: [
+            {
+              id: "background",
+              type: "background",
+              paint: { "background-color": "#ffffff" },
+            },
+            {
+              id: "hills",
+              type: "hillshade",
+              source: "dem",
+              paint: {
+                "hillshade-exaggeration": 0.25,
+                "hillshade-shadow-color": "#6b6258",
+                "hillshade-highlight-color": "#ffffff",
+              },
+            },
+            {
+              id: "broken-ground",
+              type: "fill",
+              source: "landforms",
+              "source-layer": "landform_areas",
+              paint: {
+                "fill-color": BROWN,
+                "fill-opacity": [
+                  "match",
+                  ["get", "kind"],
+                  "very_broken_ground",
+                  0.22,
+                  0.1,
+                ],
+              },
+            },
+            {
+              id: "contours",
+              type: "line",
+              source: "contours",
+              "source-layer": "contours",
+              layout: { "line-join": "round" },
+              paint: {
+                "line-color": CONTOUR,
+                "line-width": ["match", ["get", "level"], 1, 1.1, 0.5],
+              },
+            },
+            {
+              id: "form-lines",
+              type: "line",
+              source: "landforms",
+              "source-layer": "landform_lines",
+              filter: kind(["form_line"]),
+              paint: {
+                "line-color": CONTOUR,
+                "line-width": 0.5,
+                "line-dasharray": [8, 4],
+              },
+            },
+            {
+              id: "walls",
+              type: "line",
+              source: "landforms",
+              "source-layer": "landform_lines",
+              filter: kind(["earth_wall"]),
+              layout: { "line-cap": "round" },
+              paint: {
+                "line-color": BROWN,
+                "line-width": 1.6,
+                "line-dasharray": [0.1, 2.4],
+              },
+            },
+            {
+              id: "walls-ruined",
+              type: "line",
+              source: "landforms",
+              "source-layer": "landform_lines",
+              filter: kind(["ruined_earth_wall"]),
+              paint: {
+                "line-color": BROWN,
+                "line-width": 1.2,
+                "line-dasharray": [3, 2],
+              },
+            },
+            {
+              id: "gullies",
+              type: "line",
+              source: "landforms",
+              "source-layer": "landform_lines",
+              filter: kind(["erosion_gully", "small_erosion_gully"]),
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": BROWN,
+                "line-width": [
+                  "match",
+                  ["get", "kind"],
+                  "erosion_gully",
+                  1.5,
+                  0.9,
+                ],
+              },
+            },
+            {
+              id: "banks",
+              type: "line",
+              source: "landforms",
+              "source-layer": "landform_lines",
+              filter: kind(["bank", "cliff", "impassable_cliff"]),
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": colorByKind,
+                "line-width": [
+                  "match",
+                  ["get", "kind"],
+                  "impassable_cliff",
+                  2.4,
+                  "cliff",
+                  1.6,
+                  1.1,
+                ],
+              },
+            },
+            {
+              id: "bank-ticks",
+              type: "line",
+              source: "landforms",
+              "source-layer": "landform_ticks",
+              layout: { "line-cap": "butt" },
+              paint: {
+                "line-color": colorByKind,
+                "line-width": 0.8,
+              },
+            },
+            {
+              id: "knolls",
+              type: "symbol",
+              source: "landforms",
+              "source-layer": "landform_points",
+              filter: kind(["knoll", "elongated_knoll"]),
+              layout: {
+                "icon-image": ["get", "kind"],
+                "icon-rotate": ["coalesce", ["get", "orient"], 0],
+                "icon-rotation-alignment": "map",
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
+            },
+            {
+              id: "depressions",
+              type: "symbol",
+              source: "landforms",
+              "source-layer": "landform_points",
+              filter: kind(["depression", "pit"]),
+              layout: {
+                "icon-image": ["get", "kind"],
+                "icon-rotation-alignment": "map",
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
+            },
+            {
+              id: "boulders",
+              type: "symbol",
+              source: "landforms",
+              "source-layer": "landform_points",
+              filter: kind(["boulder", "large_boulder"]),
+              layout: {
+                "icon-image": ["get", "kind"],
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
+            },
+          ],
+        },
+      });
+
+      map.on("load", function () {
+        // hide the groups that start switched off
+        GROUPS.forEach(function (group) {
+          group.items.forEach(function (item) {
+            setVisible(item, item.on);
+          });
+        });
+      });
+
+      // maplibre asks for a symbol's image once a tile that needs it arrives
+      map.on("styleimagemissing", function (e) {
+        if (map.hasImage(e.id)) return;
+        if (ICONS[e.id]) {
+          map.addImage(e.id, icon(48, ICONS[e.id]), { pixelRatio: 2 });
+        } else {
+          map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+        }
+      });
+
+      // ---- panel -----------------------------------------------------------------
+      function setVisible(item, visible) {
+        item.layers.forEach(function (id) {
+          if (map.getLayer(id)) {
+            map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+          }
+        });
+      }
+
+      var toggles = document.getElementById("toggles");
+      GROUPS.forEach(function (group) {
+        var h = document.createElement("h2");
+        h.textContent = group.title;
+        toggles.appendChild(h);
+        group.items.forEach(function (item) {
+          var label = document.createElement("label");
+          var box = document.createElement("input");
+          box.type = "checkbox";
+          box.checked = item.on;
+          box.addEventListener("change", function () {
+            item.on = box.checked;
+            setVisible(item, box.checked);
+          });
+          var name = document.createElement("span");
+          name.className = "name";
+          name.textContent = item.name;
+          var code = document.createElement("span");
+          code.className = "code";
+          code.textContent = item.code;
+          label.append(box, name, code);
+          toggles.appendChild(label);
+        });
+      });
+
+      // sliders for banks, cliffs and their tags
+      var SLIDERS = [
+        { key: "tagSpacing", name: "Tag spacing", unit: " px", min: 3, max: 40, step: 0.5, reload: true },
+        { key: "tagLength", name: "Tag length", unit: " px", min: 1, max: 14, step: 0.5, reload: true },
+        { key: "tagWidth", name: "Tag thickness", unit: "×", min: 0.3, max: 3, step: 0.1 },
+        { key: "bankWidth", name: "Bank line thickness", unit: "×", min: 0.3, max: 3, step: 0.1 },
+        { key: "bankMinHeight", name: "Minimum height", unit: " m", min: 0.5, max: 5, step: 0.1, reload: true },
+        { key: "bankSlopeExcess", name: "Steeper than the hillside by", unit: "°", min: 0, max: 45, step: 1, reload: true },
+        { key: "steepSlope", name: "Steeper than", unit: "°", min: 25, max: 75, step: 1, reload: true },
+        { key: "bankMinLength", name: "Minimum length", unit: " m", min: 3, max: 60, step: 1, reload: true },
+      ];
+      var BASE_WIDTHS = {
+        banks: ["match", ["get", "kind"], "impassable_cliff", 2.4, "cliff", 1.6, 1.1],
+        "bank-ticks": 0.8,
+      };
+      function applyWidths() {
+        map.setPaintProperty("banks", "line-width", [
+          "*",
+          SETTINGS.bankWidth,
+          BASE_WIDTHS.banks,
+        ]);
+        map.setPaintProperty(
+          "bank-ticks",
+          "line-width",
+          BASE_WIDTHS["bank-ticks"] * SETTINGS.tagWidth,
+        );
+      }
+      var reloadTimer;
+      function reloadLandforms() {
+        clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(function () {
+          map
+            .getSource("landforms")
+            .setTiles([demSource.landformProtocolUrl(landformOptions())]);
+        }, 350);
+      }
+      var heading = document.createElement("h2");
+      heading.textContent = "Banks, cliffs and tags";
+      toggles.appendChild(heading);
+      SLIDERS.forEach(function (def) {
+        var row = document.createElement("div");
+        row.className = "slider";
+        var head = document.createElement("div");
+        head.className = "head";
+        var name = document.createElement("span");
+        name.textContent = def.name;
+        var out = document.createElement("output");
+        var input = document.createElement("input");
+        input.type = "range";
+        input.min = def.min;
+        input.max = def.max;
+        input.step = def.step;
+        input.value = SETTINGS[def.key];
+        var show = function () {
+          out.textContent = SETTINGS[def.key] + def.unit;
+        };
+        show();
+        input.addEventListener("input", function () {
+          SETTINGS[def.key] = Number(input.value);
+          show();
+          if (def.reload) reloadLandforms();
+          else applyWidths();
+        });
+        head.append(name, out);
+        row.append(head, input);
+        toggles.appendChild(row);
+      });
+
+      var status = document.getElementById("status");
+      function updateStatus() {
+        var z = map.getZoom();
+        status.className = z < 14 ? "warn" : "";
+        status.textContent =
+          z < 14
+            ? "Zoom in to 14 or more to see landforms."
+            : "Zoom " + z.toFixed(1);
+      }
+      map.on("zoom", updateStatus);
+      updateStatus();
+
+      var failed = false;
+      demSource.onTiming(function (timing) {
+        if (timing.error && !failed) {
+          failed = true;
+          status.className = "warn";
+          status.textContent =
+            "A tile failed to load. Does this DEM have tiles at zoom " +
+            DEM_MAXZOOM +
+            " here? Try ?maxzoom= with a lower value.";
+        }
+      });
+    </script>
+  </body>
+</html>

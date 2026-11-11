@@ -1,5 +1,10 @@
 import { LocalDemManager } from "./local-dem-manager";
-import { decodeOptions, getOptionsForZoom, parseUrl } from "./utils";
+import {
+  decodeLandformOptions,
+  decodeOptions,
+  getOptionsForZoom,
+  parseUrl,
+} from "./utils";
 import type { DemManagerRequiredInitializationParameters } from "./types";
 
 (self as any).worker.actor.registerMessageHandler(
@@ -39,6 +44,21 @@ import type { DemManagerRequiredInitializationParameters } from "./types";
           x,
           y,
           getOptionsForZoom(options, z),
+          abortController,
+        );
+        return { data: data.arrayBuffer };
+      },
+    );
+
+    (self as any).addProtocol(
+      "dem-landform",
+      async (request: any, abortController: AbortController) => {
+        const [z, x, y] = parseUrl(request.url);
+        const data = await localDemManager.fetchLandformTile(
+          z,
+          x,
+          y,
+          decodeLandformOptions(request.url),
           abortController,
         );
         return { data: data.arrayBuffer };
