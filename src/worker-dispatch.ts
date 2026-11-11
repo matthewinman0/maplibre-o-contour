@@ -5,6 +5,7 @@ import type {
   FetchResponse,
   IndividualContourTileOptions,
   InitMessage,
+  LandformTileOptions,
   TransferrableDemTile,
 } from "./types";
 import { prepareContourTile, prepareDemTile } from "./utils";
@@ -65,6 +66,26 @@ export default class WorkerDispatch {
   ): Promise<ContourTile> =>
     prepareContourTile(
       this.managers[managerId]?.fetchContourTile(
+        z,
+        x,
+        y,
+        options,
+        abortController,
+        timer,
+      ) || noManager(managerId),
+    );
+
+  fetchLandformTile = (
+    managerId: number,
+    z: number,
+    x: number,
+    y: number,
+    options: LandformTileOptions,
+    abortController: AbortController,
+    timer?: Timer,
+  ): Promise<ContourTile> =>
+    prepareContourTile(
+      this.managers[managerId]?.fetchLandformTile(
         z,
         x,
         y,

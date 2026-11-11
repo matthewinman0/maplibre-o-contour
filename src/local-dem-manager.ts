@@ -3,6 +3,19 @@ import defaultDecodeImage from "./decode-image";
 import { HeightTile } from "./height-tile";
 import generateIsolines from "./isolines";
 import { copy, encodeIndividualOptions, isAborted, withTimeout } from "./utils";
+import { Grid } from "./landform-grid";
+import {
+  resolveLandformOptions,
+  type ResolvedLandformOptions,
+} from "./landform-options";
+import {
+  detectLandforms,
+  groundTileSize,
+  makeTicks,
+  type LandformResult,
+  landformMargin,
+  prepareAnalysisTile,
+} from "./landforms";
 import type {
   ContourTile,
   DecodeImageFunction,
@@ -13,6 +26,7 @@ import type {
   FetchResponse,
   GetTileFunction,
   IndividualContourTileOptions,
+  LandformTileOptions,
 } from "./types";
 import encodeVectorTile, { GeomType } from "./vtpbf";
 import { Timer } from "./performance";
@@ -42,6 +56,8 @@ export class LocalDemManager implements DemManager {
   tileCache: AsyncCache<string, FetchResponse>;
   parsedCache: AsyncCache<string, DemTile>;
   contourCache: AsyncCache<string, ContourTile>;
+  landformCache: AsyncCache<string, ContourTile>;
+  landformDetectionCache: AsyncCache<string, LandformResult | undefined>;
   demUrlPattern: string;
   encoding: Encoding;
   maxzoom: number;
@@ -54,6 +70,8 @@ export class LocalDemManager implements DemManager {
     this.tileCache = new AsyncCache(options.cacheSize);
     this.parsedCache = new AsyncCache(options.cacheSize);
     this.contourCache = new AsyncCache(options.cacheSize);
+    this.landformCache = new AsyncCache(options.cacheSize);
+    this.landformDetectionCache = new AsyncCache(options.cacheSize);
     this.timeoutMs = options.timeoutMs;
     this.demUrlPattern = options.demUrlPattern;
     this.encoding = options.encoding;
@@ -134,7 +152,7 @@ export class LocalDemManager implements DemManager {
     z: number,
     x: number,
     y: number,
-    options: IndividualContourTileOptions,
+    options: Partial<IndividualContourTileOptions>,
     abortController: AbortController,
     timer?: Timer,
   ): Promise<HeightTile> {
@@ -262,5 +280,131 @@ export class LocalDemManager implements DemManager {
     return cached.then(({ arrayBuffer }) => ({
       arrayBuffer: copy(arrayBuffer),
     }));
+  }
+
+  /**
+   * Detects orienteering landforms around a tile: small knolls, pits, depressions, earth banks and
+   * cliffs (with tags), gullies, earth walls, form lines and broken ground. Needs a high resolution DEM.
+   *
+   * Detection is cached separately from the encoded tile, so changing only the tag spacing or
+   * length does not repeat it.
+   */
+  fetchLandformTile(
+    z: number,
+    x: number,
+    y: number,
+    options: LandformTileOptions,
+    parentAbortController: AbortController,
+    timer?: Timer,
+  ): Promise<ContourTile> {
+    const resolved = resolveLandformOptions(options);
+    const key = [z, x, y, "landforms", resolved.key].join("/");
+    const cached = this.landformCache.get(
+      key,
+      async (_, childAbortController) => {
+        const detectionKey = [
+          z,
+          x,
+          y,
+          "landform-detection",
+          resolved.detectionKey,
+        ].join("/");
+        const found = await this.landformDetectionCache.get(
+          detectionKey,
+          (_, detectionAbortController) =>
+            this.detectLandformsInTile(
+              z,
+              x,
+              y,
+              resolved,
+              detectionAbortController,
+              timer,
+            ),
+          childAbortController,
+        );
+        if (!found || isAborted(childAbortController)) {
+          return { arrayBuffer: new Uint8Array().buffer };
+        }
+        const mark = timer?.marker("isoline");
+        const result = encodeVectorTile({
+          extent: resolved.extent,
+          layers: {
+            landform_points: { features: found.points },
+            landform_lines: { features: found.lines },
+            landform_ticks: {
+              features: makeTicks(
+                found.tickLines,
+                resolved.extent,
+                resolved.tickSpacing,
+                resolved.tickLength,
+              ),
+            },
+            landform_areas: { features: found.areas },
+          },
+        });
+        mark?.();
+        return { arrayBuffer: result.slice().buffer };
+      },
+      parentAbortController,
+    );
+    return cached.then(({ arrayBuffer }) => ({
+      arrayBuffer: copy(arrayBuffer),
+    }));
+  }
+
+  /** `undefined` when there is nothing to detect: no data, or a DEM too coarse to see landforms. */
+  private async detectLandformsInTile(
+    z: number,
+    x: number,
+    y: number,
+    resolved: ResolvedLandformOptions,
+    abortController: AbortController,
+    timer?: Timer,
+  ): Promise<LandformResult | undefined> {
+    const max = 1 << z;
+    const neighborPromises: (Promise<HeightTile> | undefined)[] = [];
+    for (let iy = y - 1; iy <= y + 1; iy++) {
+      for (let ix = x - 1; ix <= x + 1; ix++) {
+        neighborPromises.push(
+          iy < 0 || iy >= max
+            ? undefined
+            : this.fetchDem(
+                z,
+                (ix + max) % max,
+                iy,
+                resolved,
+                abortController,
+                timer,
+              ),
+        );
+      }
+    }
+    const neighbors = await Promise.all(neighborPromises);
+    const virtualTile = HeightTile.combineNeighbors(neighbors);
+    if (!virtualTile || isAborted(abortController)) return undefined;
+    const { thresholds } = resolved;
+    const ground = groundTileSize(z, y);
+    // too coarse to see anything the size of an orienteering feature
+    const sourceWidth = (neighbors[4] as HeightTile).width;
+    if (ground / sourceWidth > thresholds.maxCellSize) return undefined;
+    const mark = timer?.marker("isoline");
+
+    let factor = 1;
+    while (virtualTile.width * factor < resolved.subsampleBelow) factor *= 2;
+    const width = virtualTile.width * factor;
+    const cell = ground / width;
+    const margin = Math.min(landformMargin(thresholds, cell), width);
+    const analysisTile = prepareAnalysisTile(
+      virtualTile,
+      resolved.subsampleBelow,
+      margin,
+    );
+    const grid = Grid.fromHeightTile(analysisTile, margin, cell);
+    const corners = resolved.groups.has("formLines")
+      ? analysisTile.averagePixelCentersToGrid().materialize(1)
+      : undefined;
+    const found = detectLandforms(grid, resolved, corners);
+    mark?.();
+    return found;
   }
 }
