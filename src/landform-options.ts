@@ -72,6 +72,7 @@ export interface LandformThresholds {
 
   /** Slope at which ground counts as a steep edge (earth bank). */
   steepSlope: number;
+<<<<<<< HEAD
   /**
    * Degrees by which the slope on a bank has to exceed the slope of the hillside around it,
    * so that steps on a steep hillside are not all banks. The bank height is measured with the hillside slope removed.
@@ -79,6 +80,8 @@ export interface LandformThresholds {
   bankSlopeExcess: number;
   /** Radius in metres over which the hillside slope is averaged. */
   bankBackgroundScale: number;
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   /** ISOM 104: minimum height and length of an earth bank. */
   bankMinHeight: number;
   bankMinLength: number;
@@ -150,8 +153,11 @@ export const DEFAULT_LANDFORM_THRESHOLDS: LandformThresholds = {
   pitMaxLength: 15,
 
   steepSlope: 40,
+<<<<<<< HEAD
   bankSlopeExcess: 20,
   bankBackgroundScale: 6,
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   bankMinHeight: 1,
   bankMinLength: 9,
   cliffSlope: 55,
@@ -217,8 +223,11 @@ export interface ResolvedLandformOptions {
   tickLength: number;
   /** Stable string identifying these options, for caching. */
   key: string;
+<<<<<<< HEAD
   /** The same without the tag spacing and length, which don't change what is detected. */
   detectionKey: string;
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 }
 
 export function resolveLandformOptions(
@@ -240,9 +249,12 @@ export function resolveLandformOptions(
     tickLength: options.tickLength ?? 36,
   };
   const sortedGroups = [...groups].sort();
+<<<<<<< HEAD
   const detection: Record<string, unknown> = { ...resolved };
   delete detection.tickSpacing;
   delete detection.tickLength;
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   const sortedThresholds = Object.fromEntries(
     Object.entries(thresholds).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
   );
@@ -251,6 +263,9 @@ export function resolveLandformOptions(
     thresholds,
     ...resolved,
     key: JSON.stringify([sortedGroups, sortedThresholds, resolved]),
+<<<<<<< HEAD
     detectionKey: JSON.stringify([sortedGroups, sortedThresholds, detection]),
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   };
 }

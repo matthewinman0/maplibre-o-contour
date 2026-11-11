@@ -99,6 +99,7 @@ test("landform tile contains knolls and a cliff edge with tags", async () => {
   expect(tile.ticks.length).toBeGreaterThan(10);
 });
 
+<<<<<<< HEAD
 test("tag spacing changes the tags and nothing else", async () => {
   const m = manager();
   const sparse = await fetchTile(m, X, {
@@ -118,6 +119,8 @@ test("tag spacing changes the tags and nothing else", async () => {
   expect(m.landformDetectionCache.size()).toBe(1);
 });
 
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 test("a knoll on a tile edge is owned by exactly one tile", async () => {
   const m = manager();
   const options = { features: ["knolls" as const] };

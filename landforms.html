@@ -28,7 +28,15 @@
         padding: 0;
         height: 100%;
         font-family:
+<<<<<<< HEAD
           "Inter", "Helvetica Neue", system-ui, -apple-system, "Segoe UI",
+=======
+          "Inter",
+          "Helvetica Neue",
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
           sans-serif;
         color: var(--ink);
         -webkit-font-smoothing: antialiased;
@@ -94,6 +102,7 @@
         margin: 0;
         transform: translateY(1px);
       }
+<<<<<<< HEAD
       .slider {
         padding: 4px 0 2px;
       }
@@ -111,6 +120,8 @@
         margin: 2px 0 0;
         accent-color: var(--brown);
       }
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
       #status {
         margin-top: 14px;
         color: var(--muted);
@@ -134,13 +145,19 @@
       <div id="toggles"></div>
       <div id="status"></div>
       <p class="note">
+<<<<<<< HEAD
         Needs a DEM of about 1&nbsp;m resolution. Zoom in to 15 or more.
         Edit the settings at the top of the script, or pass
+=======
+        Needs a DEM of about 1&nbsp;m resolution. Zoom in to 15 or more. Edit
+        the settings at the top of the script, or pass
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
         <code>?dem=&amp;maxzoom=&amp;tileSize=</code> in the URL.
       </p>
     </div>
     <script>
       // ---- settings --------------------------------------------------------
+<<<<<<< HEAD
       var params = new URLSearchParams(location.search);
       var DEM_URL =
         params.get("dem") || "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
@@ -193,6 +210,20 @@
       var BROWN = "#b4561e";
       var CONTOUR = "#c9793f";
       var BLACK = "#16130f";
+=======
+      // Interlaken, Switzerland, which Mapterhorn covers at 0.5 m
+      var START = { center: [7.8504, 46.6863], zoom: 16 };
+
+      var BROWN = "#b4561e";
+      var CONTOUR = "#c9793f";
+      var BLACK = "#16130f";
+      var params = new URLSearchParams(location.search);
+      var DEM_ENCODING = "terrarium";
+      var DEM_URL =
+        params.get("dem") || "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
+      var DEM_MAXZOOM = Number(params.get("maxzoom")) || 17;
+      var DEM_TILE_SIZE = Number(params.get("tileSize")) || 256;
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 
       var demSource = new mlcontour.DemSource({
         url: DEM_URL,
@@ -292,7 +323,16 @@
         {
           title: "Detected landforms",
           items: [
+<<<<<<< HEAD
             { name: "Form lines", code: "103", layers: ["form-lines"], on: true },
+=======
+            {
+              name: "Form lines",
+              code: "103",
+              layers: ["form-lines"],
+              on: true,
+            },
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
             {
               name: "Earth banks and cliffs",
               code: "104 201 202",
@@ -371,7 +411,24 @@
             landforms: {
               type: "vector",
               tiles: [
+<<<<<<< HEAD
                 demSource.landformProtocolUrl(landformOptions()),
+=======
+                demSource.landformProtocolUrl({
+                  features: [
+                    "knolls",
+                    "depressions",
+                    "banks",
+                    "gullies",
+                    "walls",
+                    "formLines",
+                    "brokenGround",
+                    "boulders",
+                  ],
+                  // make the thresholds stricter or looser here, for example:
+                  // thresholds: { knollMinHeight: 0.5, steepSlope: 45 },
+                }),
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
               ],
               minzoom: 14,
               maxzoom: DEM_MAXZOOM,
@@ -488,7 +545,11 @@
                   "match",
                   ["get", "kind"],
                   "impassable_cliff",
+<<<<<<< HEAD
                   2.4,
+=======
+                  3,
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
                   "cliff",
                   1.6,
                   1.1,
@@ -572,7 +633,15 @@
       function setVisible(item, visible) {
         item.layers.forEach(function (id) {
           if (map.getLayer(id)) {
+<<<<<<< HEAD
             map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+=======
+            map.setLayoutProperty(
+              id,
+              "visibility",
+              visible ? "visible" : "none",
+            );
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
           }
         });
       }
@@ -602,6 +671,7 @@
         });
       });
 
+<<<<<<< HEAD
       // sliders for banks, cliffs and their tags
       var SLIDERS = [
         { key: "tagSpacing", name: "Tag spacing", unit: " px", min: 3, max: 40, step: 0.5, reload: true },
@@ -670,6 +740,8 @@
         toggles.appendChild(row);
       });
 
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
       var status = document.getElementById("status");
       function updateStatus() {
         var z = map.getZoom();

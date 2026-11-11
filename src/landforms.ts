@@ -36,18 +36,24 @@ export interface LandformResult {
   lines: Feature[];
   /** downhill tags for banks and cliffs */
   ticks: Feature[];
+<<<<<<< HEAD
   /** the lines the tags hang from, so that tags can be redone with other spacing without detecting again */
   tickLines: TickLine[];
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   /** broken ground */
   areas: Feature[];
 }
 
+<<<<<<< HEAD
 export interface TickLine {
   /** flat polyline in tile units, with downhill on its left */
   points: number[];
   properties: Feature["properties"];
 }
 
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 /** Sub-pixel precision used when asking the marching squares code for lines. */
 const SUBPIXEL = 64;
 const RAD = Math.PI / 180;
@@ -118,6 +124,7 @@ function lineFeatures(
   }
 }
 
+<<<<<<< HEAD
 /**
  * Short tags, perpendicular to each line and on its left (the downhill side), spaced along it.
  * `spacing` and `length` are in tile units.
@@ -164,6 +171,48 @@ export function makeTicks(
     }
   }
   return out;
+=======
+/** Short tags, perpendicular to the line and on its left, spaced along it. */
+function addTicks(
+  ctx: Context,
+  tilePoints: number[],
+  properties: Feature["properties"],
+  out: Feature[],
+) {
+  const { tickSpacing, tickLength } = ctx.o;
+  if (tickSpacing <= 0 || tickLength <= 0) return;
+  let next = tickSpacing / 2;
+  let travelled = 0;
+  for (let k = 2; k < tilePoints.length; k += 2) {
+    const x0 = tilePoints[k - 2];
+    const y0 = tilePoints[k - 1];
+    const dx = tilePoints[k] - x0;
+    const dy = tilePoints[k + 1] - y0;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) continue;
+    while (next <= travelled + len) {
+      const f = (next - travelled) / len;
+      const x = x0 + dx * f;
+      const y = y0 + dy * f;
+      if (x >= 0 && y >= 0 && x <= ctx.extent && y <= ctx.extent) {
+        out.push({
+          type: GeomType.LINESTRING,
+          geometry: [
+            roundPath([
+              x,
+              y,
+              x + (dy / len) * tickLength,
+              y - (dx / len) * tickLength,
+            ]),
+          ],
+          properties,
+        });
+      }
+      next += tickSpacing;
+    }
+    travelled += len;
+  }
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 }
 
 interface Blob {
@@ -417,6 +466,7 @@ function detectBlobFeatures(ctx: Context, out: LandformResult) {
   }
 }
 
+<<<<<<< HEAD
 /**
  * Earth banks (104), cliffs (202) and impassable cliffs (201): steep edges with their tags pointing downhill.
  *
@@ -424,10 +474,14 @@ function detectBlobFeatures(ctx: Context, out: LandformResult) {
  * hillside around it (`bankSlopeExcess`), and its height is the drop that is left once the slope
  * of the hillside is taken out. Otherwise every step on a steep slope would become a bank.
  */
+=======
+/** Earth banks (104), cliffs (202) and impassable cliffs (201): steep edges with their tags pointing downhill. */
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 function detectBanks(ctx: Context, out: LandformResult) {
   const { grid, grad, t } = ctx;
   const { width: w, height: h, margin: m, cell } = grid;
   const steep = Math.tan(t.steepSlope * RAD);
+<<<<<<< HEAD
   const excess = t.bankSlopeExcess * RAD;
   const maxAngle = 87 * RAD;
 
@@ -452,14 +506,22 @@ function detectBanks(ctx: Context, out: LandformResult) {
       steep,
       Math.tan(Math.min(maxAngle, Math.atan(backgroundMag) + excess)),
     );
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 
   // the outline of the steep ground, with the steep side on the left of the direction of travel
   const field = new HeightTile(grid.tileWidth, grid.tileHeight, (x, y) => {
     const i = x + m;
     const j = y + m;
+<<<<<<< HEAD
     if (i < 0 || j < 0 || i >= w || j >= h) return NaN;
     const idx = j * w + i;
     return grad.mag[idx] / limitFor(background.mag[idx]);
+=======
+    return i < 0 || j < 0 || i >= w || j >= h
+      ? NaN
+      : grad.mag[j * w + i] / steep;
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   });
   const fragments =
     generateIsolines(1, field, (grid.tileWidth - 1) * SUBPIXEL, m)[1] || [];
@@ -495,6 +557,7 @@ function detectBanks(ctx: Context, out: LandformResult) {
       const below = grid.sample(px[k] + nx * 1.5, py[k] + ny * 1.5);
       const top = grid.sample(px[k], py[k]);
       if (!(below < above) || isNaN(top)) continue;
+<<<<<<< HEAD
       const bgMag = bilinear(background.mag, w, h, px[k], py[k]);
       const bgX = bilinear(background.gx, w, h, px[k], py[k]);
       const bgY = bilinear(background.gy, w, h, px[k], py[k]);
@@ -505,6 +568,10 @@ function detectBanks(ctx: Context, out: LandformResult) {
       let maxMag = 0;
       let foot = top;
       let reach = 0;
+=======
+      let maxMag = 0;
+      let foot = top;
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
       let inside = false;
       for (let u = 0.5; u <= t.cliffScanDistance / cell; u += 0.5) {
         const fx = px[k] + nx * u;
@@ -514,6 +581,7 @@ function detectBanks(ctx: Context, out: LandformResult) {
         if (isNaN(z) || isNaN(mag)) break;
         maxMag = Math.max(maxMag, mag);
         foot = z;
+<<<<<<< HEAD
         reach = u;
         if (mag >= enter) inside = true;
         else if (inside && mag < leave) break;
@@ -521,6 +589,12 @@ function detectBanks(ctx: Context, out: LandformResult) {
       // the drop that is left once the slope of the hillside is taken out
       const hillside = (bgX * nx + bgY * ny) * reach * cell;
       heights[k] = top - foot + hillside;
+=======
+        if (mag >= steep * 0.9) inside = true;
+        else if (inside && mag < steep * 0.6) break;
+      }
+      heights[k] = top - foot;
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
       slopes[k] = Math.atan(maxMag) / RAD;
       good[k] = heights[k] >= t.bankMinHeight ? 1 : 0;
     }
@@ -565,7 +639,11 @@ function detectBanks(ctx: Context, out: LandformResult) {
         { ...properties, height: round1(height), slope: Math.round(slope) },
         out.lines,
       );
+<<<<<<< HEAD
       out.tickLines.push({ points: tilePoints, properties });
+=======
+      addTicks(ctx, tilePoints, properties, out.ticks);
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
     }
   }
 }
@@ -931,6 +1009,7 @@ export function detectLandforms(
     toX: (i) => (i - grid.margin + 0.5) * s,
     toY: (j) => (j - grid.margin + 0.5) * s,
   };
+<<<<<<< HEAD
   const out: LandformResult = {
     points: [],
     lines: [],
@@ -938,6 +1017,9 @@ export function detectLandforms(
     tickLines: [],
     areas: [],
   };
+=======
+  const out: LandformResult = { points: [], lines: [], ticks: [], areas: [] };
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   const groups = options.groups;
   if (
     groups.has("knolls") ||
@@ -949,12 +1031,15 @@ export function detectLandforms(
   if (groups.has("banks")) detectBanks(ctx, out);
   if (groups.has("gullies") || groups.has("walls")) detectLinear(ctx, out);
   if (groups.has("brokenGround")) detectBrokenGround(ctx, out);
+<<<<<<< HEAD
   out.ticks = makeTicks(
     out.tickLines,
     options.extent,
     options.tickSpacing,
     options.tickLength,
   );
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   if (groups.has("formLines") && corners) detectFormLines(ctx, corners, out);
   return out;
 }
@@ -968,6 +1053,7 @@ export function groundTileSize(z: number, y: number): number {
 
 /** Pixels of surroundings the filters need, given the pixel size on the ground. */
 export function landformMargin(t: LandformThresholds, cell: number): number {
+<<<<<<< HEAD
   const reach = Math.max(
     t.linearScale,
     t.roughScale,
@@ -975,6 +1061,9 @@ export function landformMargin(t: LandformThresholds, cell: number): number {
     t.bankBackgroundScale,
     12,
   );
+=======
+  const reach = Math.max(t.linearScale, t.roughScale, t.cliffScanDistance, 12);
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
   return Math.ceil(reach / cell) + 2;
 }
 

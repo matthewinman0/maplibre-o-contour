@@ -161,7 +161,11 @@ map.addSource("landforms", {
 | ISOM | Feature | `kind` | Layer | How |
 | --- | --- | --- | --- | --- |
 | 103 | Form line | `form_line` | `landform_lines` | half-interval contours, kept only where the ground is flatter than `formLineMaxSlope` |
+<<<<<<< HEAD
 | 104 | Earth bank | `bank` | `landform_lines`, tags in `landform_ticks` | top edge of ground that is steeper than `steepSlope` and at least `bankSlopeExcess` steeper than the hillside around it, dropping at least 1 m once the hillside slope is removed |
+=======
+| 104 | Earth bank | `bank` | `landform_lines`, tags in `landform_ticks` | top edge of ground steeper than `steepSlope` that drops at least 1 m |
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 | 202 | Cliff | `cliff` | same | as above, median slope of at least `cliffSlope` |
 | 201 | Impassable cliff | `impassable_cliff` | same | as above, at least `impassableMinHeight` high and `impassableSlope` steep |
 | 105.1 / 106 | Earth wall / ruined earth wall | `earth_wall`, `ruined_earth_wall` | `landform_lines` | narrow, elongated ridges at least 1 m / 0.5 m high and 21 m / 55 m long |
@@ -175,9 +179,13 @@ map.addSource("landforms", {
 
 Every feature has `kind` and `isom` (the symbol number). Points also carry `ele` (metres), `height` or `depth`, `length` and `width` (metres), and two flags that help you decide what to draw: `small` is true when the feature is too small to be drawn with contours (see ISOM 101), and `contoured` is true when a contour at your `contourInterval` (5 m by default) already passes through it. Lines carry `height`/`depth`, `slope` or `length` where that makes sense, and form lines carry `ele`.
 
+<<<<<<< HEAD
 Cliff and bank tags are separate features in `landform_ticks`, pointing downhill from the top edge. `tickSpacing` and `tickLength` are in tile units (defaults 80 and 36, about 10 px and 4.5 px on a 512 px tile at the zoom of the tile). Draw them with a `line` layer. Changing only the tag spacing or length re-uses the detection, so it is cheap. Tags are part of the tile data, so they scale with the map like the rest of the tile; they cannot stay a fixed size on screen.
 
 For banks the settings that matter most are `steepSlope`, `bankSlopeExcess` (raise it if steps on steep hillsides still show up as banks), `bankMinHeight`, `bankMinLength` and `bankBackgroundScale`. `landforms.html` has sliders for them.
+=======
+Cliff and bank tags are separate features in `landform_ticks`, pointing downhill from the top edge, spaced by `tickSpacing` tile units (default 80, about 10 px on a 512 px tile). Draw them with a `line` layer.
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 
 ## Not in the DEM
 

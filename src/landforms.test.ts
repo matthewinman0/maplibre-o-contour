@@ -178,6 +178,7 @@ test("the same step seen from the other side has the same tags", () => {
   }
 });
 
+<<<<<<< HEAD
 test("steps on a steep hillside are not banks, but a cliff on it is", () => {
   // a hillside that falls to the south at 35 degrees with a 1.8 m, 58 degree step every 8 m,
   // which is 43 degrees on average
@@ -204,6 +205,8 @@ test("steps on a steep hillside are not banks, but a cliff on it is", () => {
   }
 });
 
+=======
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 test("a gentle slope has no edges", () => {
   expect(run((x, y) => 0.3 * x + 0.2 * y, ["banks"]).lines).toHaveLength(0);
 });
@@ -244,6 +247,7 @@ test("flat terrain produces nothing", () => {
     () => 100,
     ["knolls", "depressions", "banks", "gullies", "walls", "brokenGround"],
   );
+<<<<<<< HEAD
   expect(result).toEqual({
     points: [],
     lines: [],
@@ -251,6 +255,9 @@ test("flat terrain produces nothing", () => {
     tickLines: [],
     areas: [],
   });
+=======
+  expect(result).toEqual({ points: [], lines: [], ticks: [], areas: [] });
+>>>>>>> cfd2be6413180125f177f5fbe7b6615f72f5cccb
 });
 
 test("clipPolyline interpolates at the rectangle edge", () => {
